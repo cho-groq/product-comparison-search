@@ -73,7 +73,7 @@ const toolHandler = {
 
 export default function Home() {
 	const { messages, error, sendMessage } = useCompletionWithTools({
-		messages: [{ role: "system", content: systemPrompt }],
+		messages: [],
 		toolHandler,
 		tools,
 	});
