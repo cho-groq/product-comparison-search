@@ -19,9 +19,8 @@ export function MicButton({
 		}
 	}, [audioBlob, transcribeAudio]);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: Can't rely on onTranscription being stable
 	useEffect(() => {
-		if (transcription) {
+		if (transcription && transcription.trim() !== '') {
 			onTranscription(transcription);
 		}
 	}, [transcription]);

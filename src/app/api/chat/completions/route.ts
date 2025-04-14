@@ -1,11 +1,21 @@
 import Groq from "groq-sdk";
 import type { NextRequest } from "next/server";
+import json5 from 'json5';
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const groq = new Groq({
 	apiKey: GROQ_API_KEY,
 });
+
+function isValidJSON(str) {
+	try {
+		JSON.parse(str);
+	} catch (e) {
+		return false;
+	}
+	return true;
+}
 
 export async function POST(req: NextRequest) {
 	if (!GROQ_API_KEY) {
@@ -58,20 +68,10 @@ export async function POST(req: NextRequest) {
 					}),
 				});
 
-				// Debug: Check if response is OK
 				if (!response.ok) {
 					const errorText = await response.text();
 					console.error("Fetch error:", response.status, errorText);
 					controller.error(`Fetch failed: ${response.statusText}`);
-					return;
-				}
-
-				// Debug: Check content type
-				const contentType = response.headers.get("content-type");
-				console.log("Response content type:", contentType);
-				if (!contentType?.includes("text/event-stream")) {
-					console.error("Unexpected content type:", contentType);
-					controller.error("Unexpected content type, expected text/event-stream.");
 					return;
 				}
 
@@ -82,54 +82,66 @@ export async function POST(req: NextRequest) {
 					controller.error("Failed to get reader from response body");
 					return;
 				}
-				
 
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-		
+				let done = false;
+				while (!done) {
+					const { value, done: doneReading } = await reader.read();
+					done = doneReading;
+
+					if (value) {
 						const chunk = decoder.decode(value, { stream: true });
-						console.log("Received chunk:", chunk); // Debug log
-		
-						// Split by newlines and filter valid JSON lines
-						const jsonChunks = chunk
-							.trim()
-							.split("\n")
-							.map(line => line.replace(/^data: /, "").trim()) // Remove "data: "
-							.filter(line => line && line !== "[DONE]"); // Ignore empty lines and end signal
-		
-						for (const jsonString of jsonChunks) {
-							try {
-								const jsonChunk = JSON.parse(jsonString);
-								console.log("Parsed JSON chunk:", jsonChunk); // Debug log
-		
-								const text = jsonChunk.choices?.[0]?.delta?.content ?? "";
-								if (text) {
-									controller.enqueue(
-										encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
-									);
+
+						// Split the chunk into individual lines
+						const lines = chunk.split("\n\n");
+
+						for (const line of lines) {
+							if (line.startsWith("data: ")) {
+								const data = line.slice("data: ".length);
+
+								if (data.trim() !== '') {
+									if (isValidJSON(data)) {
+										try {
+											const jsonData = JSON.parse(data);
+
+											// Handle the JSON data here
+											const text = jsonData.choices?.[0]?.delta?.content ?? "";
+											const tool_calls = jsonData.choices?.[0]?.delta?.tool_calls ?? [];
+
+											if (text !== "[DONE]") {
+												// Append chunk to the last assistant message in state
+												controller.enqueue(
+													encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
+												);
+
+												// Extract URLs from the response
+												const urls = [];
+												if (text !== null && text !== undefined) {
+													const regex = /https?:\/\/[^\s]+/g;
+													const matches = text.match(regex);
+													if (matches) {
+														urls.push(...matches);
+													}
+												}
+
+												// Return the URLs in the response
+												if (urls.length > 0) {
+													controller.enqueue(
+														encoder.encode(`data: ${JSON.stringify({ urls })}\n\n`)
+													);
+												}
+											}
+										} catch (err) {
+											console.error("Error parsing JSON:", err);
+											controller.error("Error parsing JSON");
+											return;
+										}
+									}
 								}
-		
-								const tool_calls = jsonChunk.choices?.[0]?.delta?.tool_calls ?? [];
-								if (tool_calls.length > 0) {
-									controller.enqueue(
-										encoder.encode(`data: ${JSON.stringify({ tool_calls })}\n\n`)
-									);
-								}
-							} catch (err) {
-								console.error("Error parsing JSON chunk:", err, jsonString);
 							}
 						}
 					}
-				} catch (err) {
-					console.error("Stream reading error:", err);
-					controller.error("Error reading stream");
 				}
-		
-				controller.enqueue(
-					encoder.encode(`data: ${JSON.stringify({ text: "[DONE]" })}\n\n`)
-				);
+
 				controller.close();
 			},
 		});

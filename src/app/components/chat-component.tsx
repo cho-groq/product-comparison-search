@@ -12,13 +12,15 @@ export function ChatComponent({
 	error,
 	handleNewMessage,
 	defaultPrompt,
-	logo
+	logo,
+	urls,
 }: {
 	messages: CompletionMessage[];
 	error?: Error | null;
 	handleNewMessage: (message: string) => void;
 	defaultPrompt: string;
 	logo: string;
+	urls: string[];
 }) {
 	const chatContainerRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -26,8 +28,10 @@ export function ChatComponent({
 
 	const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		handleNewMessage(input);
-		setInput("");
+		if (input.trim() !== '') {
+			handleNewMessage(input);
+			setInput("");
+		}
 	};
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: execute only when messages change
@@ -61,6 +65,25 @@ export function ChatComponent({
 							<MarkdownBlock>
 								{message.tool_calls ? "(using tool)" : message.content}
 							</MarkdownBlock>
+							{message.urls && (
+								<div className="mt-2">
+									<h3 className="text-sm font-bold">Links:</h3>
+									<ul>
+										{message.urls.map((url, i) => (
+											<li key={i}>
+												<a
+													href={url}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="text-blue-600 hover:text-blue-800"
+												>
+													{url}
+												</a>
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
 						</div>
 					))}
 				</div>
@@ -86,8 +109,33 @@ export function ChatComponent({
 				<Button type="submit">
 					<CornerDownLeft className="w-4 h-4" /> Send
 				</Button>
-				<MicButton onTranscription={handleNewMessage} />
+				<MicButton 
+					onTranscription={(transcription) => {
+						if (transcription.trim() !== '') {
+							handleNewMessage(transcription);
+						}
+					}} 
+				/>
 			</form>
+			{urls.length > 0 && (
+				<div className="mt-2">
+					<h3 className="text-sm font-bold">URLs:</h3>
+					<ul>
+						{urls.map((url, i) => (
+							<li key={i}>
+								<a
+									href={url}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-blue-600 hover:text-blue-800"
+								>
+									{url}
+								</a>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
 		</div>
 	);
 }

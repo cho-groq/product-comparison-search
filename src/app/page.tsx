@@ -7,6 +7,7 @@ import {
 import { ChatComponent } from "./components/chat-component";
 import type { ChatCompletionTool } from "groq-sdk/resources/chat/completions.mjs";
 import { useTheme } from "next-themes"; 
+import { useCompletion } from "@/hooks/use-completion";
 
 /**
  *
@@ -72,11 +73,7 @@ const toolHandler = {
 };
 
 export default function Home() {
-	const { messages, error, sendMessage } = useCompletionWithTools({
-		messages: [],
-		toolHandler,
-		tools,
-	});
+	const { messages, error, sendMessage, urls } = useCompletion();
 
 	const { theme } = useTheme(); // Get the current theme
 
@@ -92,6 +89,7 @@ export default function Home() {
 				error={error}
 				handleNewMessage={sendMessage}
 				logo={imageSrc}
+				urls={urls}
 			/>
 		</main>
 	);

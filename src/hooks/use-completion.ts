@@ -16,6 +16,7 @@ export interface CompletionMessage {
 	tool_calls?: ToolCallInstruction[];
 	tool_call_id?: string;
 	name?: string;
+	urls?: string[];
 }
 
 export interface CompletionDefaults {
@@ -32,6 +33,7 @@ export function useCompletion({
 	const [messages, setMessages] = useState<CompletionMessage[]>(defMsgs);
 	const [tools, setTools] = useState<ChatCompletionTool[]>(defTools);
 	const [triggerSend, setTriggerSend] = useState(false);
+	const [urls, setUrls] = useState<string[]>([]);
 
 	const reset = useCallback(() => {
 		if (loading) {
@@ -42,6 +44,7 @@ export function useCompletion({
 		setTools([]);
 		setError(null);
 		setTriggerSend(false);
+		setUrls([]);
 	}, [loading]);
 
 	const sendMessages = useCallback(async () => {
@@ -85,7 +88,7 @@ export function useCompletion({
 					for (const line of lines) {
 						if (line.startsWith("data: ")) {
 							const data = line.slice("data: ".length);
-							const { text, tool_calls } = JSON.parse(data);
+							const { text, tool_calls, urls } = JSON.parse(data);
 
 							// Server might send "[DONE]" to signal completion
 							if (text !== "[DONE]") {
@@ -96,7 +99,7 @@ export function useCompletion({
 									if (lastIndex < 0) return updated;
 
 									const lastMessage = updated[lastIndex];
-									// Make sure it’s the assistant message we just added
+									// Make sure it's the assistant message we just added
 									if (lastMessage.role === "assistant") {
 										updated[lastIndex] = {
 											...lastMessage,
@@ -105,6 +108,11 @@ export function useCompletion({
 									}
 									return updated;
 								});
+
+								// Add URLs to the state
+								if (urls) {
+									setUrls((prev) => [...prev, ...urls]);
+								}
 							}
 
 							if (tool_calls) {
@@ -129,13 +137,17 @@ export function useCompletion({
 	}, [messages, tools]);
 
 	const addMessageAndSend = useCallback((message: CompletionMessage) => {
-		setMessages((prev) => [...prev, message]);
-		setTriggerSend(true);
+		if (message.content && message.content.trim() !== '') {
+			setMessages((prev) => [...prev, message]);
+			setTriggerSend(true);
+		}
 	}, []);
 
 	const sendMessage = useCallback(
 		(userMessage: string) => {
-			addMessageAndSend({ role: "user", content: userMessage });
+			if (userMessage.trim() !== '') {
+				addMessageAndSend({ role: "user", content: userMessage });
+			}
 		},
 		[addMessageAndSend],
 	);
@@ -160,5 +172,6 @@ export function useCompletion({
 		reset,
 		addMessageAndSend,
 		sendMessage,
+		urls,
 	};
 }
