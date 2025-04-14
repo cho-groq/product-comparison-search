@@ -110,7 +110,16 @@ export function useCompletion({
 								});
 
 								// Add URLs to the state
-								if (urls) {
+								if (tool_calls) {
+									const urls = [];
+									tool_calls.forEach((tool_call) => {
+										const output = tool_call.output;
+										const regex = /https?:\/\/[^\s]+/g;
+										const matches = output.match(regex);
+										if (matches) {
+											urls.push(...matches);
+										}
+									});
 									setUrls((prev) => [...prev, ...urls]);
 								}
 							}

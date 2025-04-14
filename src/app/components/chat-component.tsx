@@ -22,6 +22,8 @@ export function ChatComponent({
 	logo: string;
 	urls: string[];
 }) {
+	console.log("URLs:", urls); // Console log the URLs
+
 	const chatContainerRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [input, setInput] = useState(defaultPrompt);

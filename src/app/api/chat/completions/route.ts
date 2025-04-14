@@ -91,17 +91,18 @@ export async function POST(req: NextRequest) {
 					if (value) {
 						const chunk = decoder.decode(value, { stream: true });
 
-						// Split the chunk into individual lines
+						// The server sends SSE-like lines in the format:  data: chunk\n\n
 						const lines = chunk.split("\n\n");
-
 						for (const line of lines) {
 							if (line.startsWith("data: ")) {
 								const data = line.slice("data: ".length);
+								console.log("Received data:", data);
 
 								if (data.trim() !== '') {
 									if (isValidJSON(data)) {
 										try {
 											const jsonData = JSON.parse(data);
+											console.log("Parsed JSON data:", jsonData);
 
 											// Handle the JSON data here
 											const text = jsonData.choices?.[0]?.delta?.content ?? "";
@@ -115,12 +116,16 @@ export async function POST(req: NextRequest) {
 
 												// Extract URLs from the response
 												const urls = [];
-												if (text !== null && text !== undefined) {
-													const regex = /https?:\/\/[^\s]+/g;
-													const matches = text.match(regex);
-													if (matches) {
-														urls.push(...matches);
-													}
+												if (tool_calls.length > 0) {
+													tool_calls.forEach((tool_call) => {
+														const output = tool_call.output;
+														const regex = /https?:\/\/[^\s]+/g;
+														const matches = output.match(regex);
+														if (matches) {
+															urls.push(...matches);
+														}
+													});
+													console.log("Extracted URLs:", urls);
 												}
 
 												// Return the URLs in the response
