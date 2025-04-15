@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: "Groq App",
-	description: "Groq App Description",
+	title: "Groq Compound Beta",
+	description: "Groq Compound Beta Demo App",
 };
 
 export default function RootLayout({
