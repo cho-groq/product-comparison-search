@@ -47,9 +47,14 @@ export function useCompletion({
 		setUrls([]);
 	}, [loading]);
 
+	// Helper function to extract URLs from text
+	
+
 	const sendMessages = useCallback(async () => {
 		setError(null);
 		setLoading(true);
+		// Reset URLs for the new response
+		setUrls([]);
 
 		try {
 			const response = await fetch("/api/chat/completions", {
@@ -61,7 +66,7 @@ export function useCompletion({
 			if (!response.ok) {
 				throw new Error(
 					(await response.json()).error ||
-						`Request failed with code ${response.status}`,
+					`Request failed with code ${response.status}`,
 				);
 			}
 
@@ -74,6 +79,9 @@ export function useCompletion({
 
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
+			
+			// To store extracted URLs for the current message
+			const messageUrls: string[] = [];
 
 			let done = false;
 			while (!done) {
@@ -82,64 +90,70 @@ export function useCompletion({
 
 				if (value) {
 					const chunk = decoder.decode(value, { stream: true });
+					console.log("Raw chunk:", chunk);
 
-					// The server sends SSE-like lines in the format:  data: chunk\n\n
 					const lines = chunk.split("\n\n");
 					for (const line of lines) {
 						if (line.startsWith("data: ")) {
 							const data = line.slice("data: ".length);
-							const { text, tool_calls, urls } = JSON.parse(data);
+							if (!data.trim()) continue;
 
-							// Server might send "[DONE]" to signal completion
-							if (text !== "[DONE]") {
-								// Append chunk to the last assistant message in state
-								setMessages((prev) => {
-									const updated = [...prev];
-									const lastIndex = updated.length - 1;
-									if (lastIndex < 0) return updated;
+							try {
+								console.log("Processing line:", data);
+								const parsedData = JSON.parse(data);
 
-									const lastMessage = updated[lastIndex];
-									// Make sure it's the assistant message we just added
-									if (lastMessage.role === "assistant") {
-										updated[lastIndex] = {
-											...lastMessage,
-											content: lastMessage.content + text,
-										};
-									}
-									return updated;
-								});
+								if (parsedData.text && parsedData.text !== "[DONE]") {
+									setMessages((prev) => {
+										const updated = [...prev];
+										const lastIndex = updated.length - 1;
+										if (lastIndex < 0) return updated;
 
-								// Add URLs to the state
-								if (tool_calls) {
-									const urls = [];
-									tool_calls.forEach((tool_call) => {
-										const output = tool_call.output;
-										const regex = /https?:\/\/[^\s]+/g;
-										const matches = output.match(regex);
-										if (matches) {
-											urls.push(...matches);
+										const lastMessage = updated[lastIndex];
+										if (lastMessage.role === "assistant") {
+											updated[lastIndex] = {
+												...lastMessage,
+												content: (lastMessage.content || "") + parsedData.text,
+											};
 										}
+										return updated;
 									});
-									setUrls((prev) => [...prev, ...urls]);
 								}
-							}
 
-							if (tool_calls) {
-								setMessages((prev) => [
-									...prev.slice(0, -1),
-									{ role: "assistant", tool_calls },
-								]);
+								// ✅ ONLY HANDLE URLs sent by the backend
+								if (parsedData.urls && Array.isArray(parsedData.urls)) {
+									console.log("Backend sent URLs:", parsedData.urls);
+
+									setUrls(prev => {
+										const deduped = [...new Set([...prev, ...parsedData.urls])];
+										return deduped;
+									});
+
+									setMessages(prev => {
+										const lastIndex = prev.length - 1;
+										if (lastIndex < 0) return prev;
+
+										const updated = [...prev];
+										const lastMessage = updated[lastIndex];
+
+										if (lastMessage.role === "assistant") {
+											updated[lastIndex] = {
+												...lastMessage,
+												urls: [...new Set([...(lastMessage.urls || []), ...parsedData.urls])],
+											};
+										}
+
+										return updated;
+									});
+								}
+							} catch (err) {
+								console.error("Error parsing data chunk:", err, data);
 							}
 						}
 					}
 				}
 			}
 		} catch (err) {
-			if (err instanceof Error) {
-				setError(err);
-			} else {
-				setError(new Error("An unknown error occurred"));
-			}
+			setError(err instanceof Error ? err : new Error("An unknown error occurred"));
 		} finally {
 			setLoading(false);
 		}
@@ -171,13 +185,10 @@ export function useCompletion({
 	return {
 		error,
 		loading,
-
 		messages,
 		setMessages,
-
 		tools,
 		setTools,
-
 		reset,
 		addMessageAndSend,
 		sendMessage,
